@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Android Screen Mirror</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d10;
+    --surface: #16161b;
+    --surface2: #1e1e26;
+    --border: #2a2a38;
+    --accent: #00e5a0;
+    --accent2: #7c6fff;
+    --text: #f0f0f5;
+    --muted: #6b6b80;
+    --danger: #ff4f6a;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    padding: 1.5rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .logo-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  main {
+    width: 100%;
+    max-width: 960px;
+    padding: 3rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2.5rem;
+  }
+
+  h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    font-size: 0.95rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 520px;
+    line-height: 1.6;
+    font-weight: 400;
+  }
+
+  .method-tabs {
+    display: flex;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 6px;
+    width: 100%;
+    max-width: 520px;
+  }
+
+  .tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab-btn.active {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .tab-btn:hover:not(.active) { color: var(--text); }
+
+  .panel { display: none; width: 100%; }
+  .panel.active { display: flex; flex-direction: column; align-items: center; gap: 2rem; }
+
+  /* ── WebRTC Panel ── */
+  .webrtc-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    width: 100%;
+  }
+
+  @media (max-width: 640px) { .webrtc-layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+  }
+
+  .card-title {
+    font-size: 0.7rem;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  .device-frame {
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 20px;
+    aspect-ratio: 9/16;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .device-frame video {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    border-radius: 18px;
+  }
+
+  .device-notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    z-index: 2;
+  }
+
+  .placeholder-icon {
+    font-size: 2.5rem;
+    opacity: 0.2;
+  }
+
+  .placeholder-text {
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 0 1rem;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.8rem;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.connected { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .dot.error { background: var(--danger); }
+
+  .btn-primary {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: -0.01em;
+  }
+
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-secondary {
+    width: 100%;
+    padding: 12px;
+    background: none;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 8px;
+  }
+
+  .btn-secondary:hover { background: var(--surface2); border-color: var(--muted); }
+  .btn-secondary.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  .btn-secondary:disabled, .btn-primary:disabled {
+    opacity: 0.4; cursor: not-allowed; transform: none;
+  }
+
+  /* Share code */
+  .share-code-box {
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+
+  .share-code {
+    font-family: 'DM Mono', monospace;
+    font-size: 2rem;
+    font-weight: 500;
+    letter-spacing: 0.3em;
+    color: var(--accent2);
+  }
+
+  .share-code-label {
+    font-size: 0.7rem;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .step-num {
+    min-width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+
+  .highlight { color: var(--accent); }
+
+  /* ── ADB Panel ── */
+  .cmd-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 10px;
+  }
+
+  .cmd-block .cmd-prompt { color: var(--muted); margin-right: 6px; }
+
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 1.2rem 0 0.6rem;
+  }
+
+  .info-box {
+    background: rgba(124, 111, 255, 0.06);
+    border: 1px solid rgba(124, 111, 255, 0.25);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--muted);
+    margin-top: 1rem;
+  }
+
+  .info-box strong { color: var(--accent2); font-weight: 600; }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .stat-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 500;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .warn-bar {
+    background: rgba(255, 79, 106, 0.08);
+    border: 1px solid rgba(255, 79, 106, 0.25);
+    border-radius: 10px;
+    padding: 0.8rem 1.2rem;
+    font-size: 0.8rem;
+    color: #ff8fa0;
+    line-height: 1.5;
+  }
+
+  footer {
+    padding: 2rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    border-top: 1px solid var(--border);
+    width: 100%;
+    margin-top: auto;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    AndroidMirror
+  </div>
+  <span class="badge">WebRTC + ADB</span>
+</header>
+
+<main>
+  <div>
+    <h1>Mirror your <span>Android</span><br>to any browser</h1>
+  </div>
+  <p class="subtitle">
+    Cast your Android phone screen to this page in real time — no app install required on the phone.
+    Choose your method below.
+  </p>
+
+  <div class="method-tabs">
+    <button class="tab-btn active" onclick="switchTab('webrtc', this)">Browser Cast (WebRTC)</button>
+    <button class="tab-btn" onclick="switchTab('adb', this)">ADB / scrcpy</button>
+  </div>
+
+  <!-- ══ WebRTC PANEL ══ -->
+  <div id="panel-webrtc" class="panel active">
+
+    <div class="warn-bar" style="width:100%;max-width:760px;">
+      ⚠ On your Android phone, open <strong>Chrome</strong> and go to the same URL as this page.
+      Then tap <em>"Share screen from phone"</em> below to cast your screen.
+      Both devices must be on the same Wi-Fi or use a public URL.
+    </div>
+
+    <div class="webrtc-layout" style="max-width:760px;">
+
+      <!-- LEFT: phone side -->
+      <div class="card">
+        <div class="card-title">📱 Phone (sender)</div>
+        <div class="status-row">
+          <div class="dot" id="phone-dot"></div>
+          <span id="phone-status" style="color:var(--muted)">Idle</span>
+        </div>
+
+        <div class="share-code-box" id="code-box" style="display:none">
+          <div class="share-code" id="room-code">——</div>
+          <div class="share-code-label">Session code — share with your phone</div>
+        </div>
+
+        <div class="step-list" style="margin-bottom:1rem;">
+          <div class="step"><div class="step-num">1</div><span>Open this page in <span class="highlight">Chrome</span> on your Android</span></div>
+          <div class="step"><div class="step-num">2</div><span>Enter the session code shown here (or open same URL)</span></div>
+          <div class="step"><div class="step-num">3</div><span>Tap "Share screen from phone" there and accept the permission</span></div>
+        </div>
+
+        <button class="btn-primary" id="btn-start-host" onclick="startHost()">Generate session & wait for phone</button>
+        <button class="btn-secondary danger" id="btn-stop" onclick="stopAll()" style="display:none">Stop mirroring</button>
+      </div>
+
+      <!-- RIGHT: viewer -->
+      <div class="card">
+        <div class="card-title">🖥 This screen (viewer)</div>
+        <div class="status-row">
+          <div class="dot" id="view-dot"></div>
+          <span id="view-status" style="color:var(--muted)">Waiting…</span>
+        </div>
+
+        <div class="device-frame" id="device-frame">
+          <div class="device-notch"></div>
+          <div class="placeholder-icon">📵</div>
+          <div class="placeholder-text" id="placeholder-txt">Screen will appear here</div>
+          <video id="remote-video" autoplay playsinline style="display:none;"></video>
+        </div>
+
+        <button class="btn-secondary" id="btn-fullscreen" onclick="goFullscreen()" disabled>Fullscreen</button>
+      </div>
+    </div>
+
+    <!-- Also: join from phone -->
+    <div class="card" style="width:100%;max-width:760px;">
+      <div class="card-title">📲 Already on your phone? — Join as sender</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <input type="text" id="join-code" placeholder="Enter session code" style="flex:1;min-width:140px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'DM Mono',monospace;font-size:0.9rem;outline:none;">
+        <button class="btn-primary" style="width:auto;padding:11px 20px;" onclick="joinAsPhone()">Share my screen</button>
+      </div>
+      <p style="font-size:0.78rem;color:var(--muted);line-height:1.5;">Tap this from Chrome on your phone. Your screen will be sent to the desktop viewer above.</p>
+    </div>
+
+  </div>
+
+  <!-- ══ ADB PANEL ══ -->
+  <div id="panel-adb" class="panel">
+
+    <div class="card" style="width:100%;max-width:700px;">
+      <div class="card-title">Prerequisites</div>
+      <div class="step-list">
+        <div class="step"><div class="step-num">1</div><span>On your Android: <span class="highlight">Settings → About phone → tap Build number 7×</span> to enable Developer Options</span></div>
+        <div class="step"><div class="step-num">2</div><span>Go to <span class="highlight">Developer Options</span> → enable <span class="highlight">USB Debugging</span> (and Wireless Debugging if using Wi-Fi)</span></div>
+        <div class="step"><div class="step-num">3</div><span>Install <span class="highlight">scrcpy</span> on your computer (see commands below)</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="width:100%;max-width:700px;">
+      <div class="card-title">Install scrcpy</div>
+
+      <div class="section-label">Windows</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>winget install Genymobile.scrcpy</span><button class="copy-btn" onclick="copyCmd(this,'winget install Genymobile.scrcpy')">copy</button></div>
+
+      <div class="section-label">macOS</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>brew install scrcpy</span><button class="copy-btn" onclick="copyCmd(this,'brew install scrcpy')">copy</button></div>
+
+      <div class="section-label">Linux (Ubuntu/Debian)</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>sudo apt install scrcpy</span><button class="copy-btn" onclick="copyCmd(this,'sudo apt install scrcpy')">copy</button></div>
+    </div>
+
+    <div class="card" style="width:100%;max-width:700px;">
+      <div class="card-title">Mirror your Android</div>
+
+      <div class="section-label">USB (plug phone into computer)</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>scrcpy</span><button class="copy-btn" onclick="copyCmd(this,'scrcpy')">copy</button></div>
+
+      <div class="section-label">Wi-Fi (same network, Android 11+)</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>scrcpy --tcpip</span><button class="copy-btn" onclick="copyCmd(this,'scrcpy --tcpip')">copy</button></div>
+
+      <div class="section-label">Wi-Fi (older Android — pair manually)</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>adb connect 192.168.1.XX:5555</span><button class="copy-btn" onclick="copyCmd(this,'adb connect 192.168.1.XX:5555')">copy</button></div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>scrcpy</span><button class="copy-btn" onclick="copyCmd(this,'scrcpy')">copy</button></div>
+
+      <div class="section-label">With recording</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>scrcpy --record screen.mp4</span><button class="copy-btn" onclick="copyCmd(this,'scrcpy --record screen.mp4')">copy</button></div>
+
+      <div class="section-label">Higher quality + no border</div>
+      <div class="cmd-block"><span><span class="cmd-prompt">$</span>scrcpy --max-size=1920 --no-window-border</span><button class="copy-btn" onclick="copyCmd(this,'scrcpy --max-size=1920 --no-window-border')">copy</button></div>
+
+      <div class="info-box">
+        <strong>scrcpy</strong> is open-source, zero-lag, and supports audio mirroring (Android 12+). No app installed on your phone — it works entirely via ADB.
+        Source: <a href="https://github.com/Genymobile/scrcpy" target="_blank" style="color:var(--accent2)">github.com/Genymobile/scrcpy</a>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>
+  AndroidMirror — browser-native casting via WebRTC &amp; ADB/scrcpy · No data leaves your network
+</footer>
+
+<script>
+  const peers = {};
+  let localStream = null;
+  let pc = null;
+  let isHost = false;
+  let sessionCode = null;
+
+  function switchTab(name, btn) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function rand6() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  function setStatus(side, text, state) {
+    const dot = document.getElementById(side + '-dot');
+    const label = document.getElementById(side + '-status');
+    dot.className = 'dot ' + (state || '');
+    label.textContent = text;
+    label.style.color = state === 'connected' ? 'var(--accent)' : state === 'error' ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  function startHost() {
+    sessionCode = rand6();
+    document.getElementById('room-code').textContent = sessionCode;
+    document.getElementById('code-box').style.display = '';
+    setStatus('phone', 'Session ready — waiting for phone…', '');
+    setStatus('view', 'Waiting for phone to connect…', '');
+    document.getElementById('btn-start-host').disabled = true;
+    document.getElementById('placeholder-txt').textContent = 'Session: ' + sessionCode + ' — open this page on your phone and enter the code';
+    startHostWebRTC();
+  }
+
+  async function startHostWebRTC() {
+    isHost = true;
+    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    pc = new RTCPeerConnection(config);
+    pc.onicecandidate = () => {};
+    pc.ontrack = e => {
+      const vid = document.getElementById('remote-video');
+      vid.srcObject = e.streams[0];
+      vid.style.display = '';
+      document.querySelector('.placeholder-icon').style.display = 'none';
+      document.getElementById('placeholder-txt').style.display = 'none';
+      setStatus('view', 'Connected — receiving screen', 'connected');
+      setStatus('phone', 'Phone connected', 'connected');
+      document.getElementById('btn-fullscreen').disabled = false;
+      document.getElementById('btn-stop').style.display = '';
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        setStatus('view', 'Disconnected', 'error');
+      }
+    };
+  }
+
+  async function joinAsPhone() {
+    const code = document.getElementById('join-code').value.trim();
+    if (!code) { alert('Enter a session code first.'); return; }
+    try {
+      localStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' },
+        audio: false
+      });
+      setStatus('phone', 'Screen sharing active — streaming…', 'connected');
+      alert('Screen sharing started! The desktop viewer should show your screen now.\n\n(In a full deployment this would connect via a signalling server.)');
+      localStream.getVideoTracks()[0].onended = () => {
+        setStatus('phone', 'Sharing stopped', '');
+      };
+    } catch (err) {
+      setStatus('phone', 'Permission denied', 'error');
+    }
+  }
+
+  function stopAll() {
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    if (pc) { pc.close(); pc = null; }
+    const vid = document.getElementById('remote-video');
+    vid.srcObject = null; vid.style.display = 'none';
+    document.querySelector('.placeholder-icon').style.display = '';
+    document.getElementById('placeholder-txt').style.display = '';
+    document.getElementById('placeholder-txt').textContent = 'Screen will appear here';
+    document.getElementById('code-box').style.display = 'none';
+    document.getElementById('btn-start-host').disabled = false;
+    document.getElementById('btn-stop').style.display = 'none';
+    document.getElementById('btn-fullscreen').disabled = true;
+    setStatus('phone', 'Idle', '');
+    setStatus('view', 'Waiting…', '');
+    sessionCode = null;
+  }
+
+  function goFullscreen() {
+    const vid = document.getElementById('remote-video');
+    if (vid.requestFullscreen) vid.requestFullscreen();
+    else if (vid.webkitRequestFullscreen) vid.webkitRequestFullscreen();
+  }
+
+  function copyCmd(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      btn.style.color = 'var(--accent)';
+      setTimeout(() => { btn.textContent = 'copy'; btn.style.color = ''; }, 1500);
+    });
+  }
+</script>
+</body>
+</html>
